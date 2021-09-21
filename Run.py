@@ -9,6 +9,9 @@ import numpy as np
 import argparse, imutils
 import time, dlib, cv2, datetime
 from itertools import zip_longest
+from flask import Flask, Response
+
+app = Flask(__name__)
 
 t0 = time.time()
 
@@ -251,7 +254,6 @@ def run():
 					x.append(len(empty1)-len(empty))
 					#print("Total people inside:", x)
 
-
 			# store the trackable object in our dictionary
 			trackableObjects[objectID] = to
 
@@ -273,7 +275,7 @@ def run():
 		("Total people inside", x),
 		]
 
-                # Display the output
+        # Display the output
 		for (i, (k, v)) in enumerate(info):
 			text = "{}: {}".format(k, v)
 			cv2.putText(frame, text, (10, H - ((i * 20) + 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
@@ -288,17 +290,22 @@ def run():
 			d = [datetimee, empty1, empty, x]
 			export_data = zip_longest(*d, fillvalue = '')
 
-			with open('Log.csv', 'w', newline='') as myfile:
+			with open('log.csv', 'w', newline='') as myfile:
 				wr = csv.writer(myfile, quoting=csv.QUOTE_ALL)
 				wr.writerow(("End Time", "In", "Out", "Total Inside"))
 				wr.writerows(export_data)
-				
+						
 		# check to see if we should write the frame to disk
 		if writer is not None:
 			writer.write(frame)
 
 		# show the output frame
-		cv2.imshow("Real-Time Monitoring/Analysis Window", frame)
+		ret, jpeg = cv2.imencode('.jpg', frame)
+		vid = jpeg.tobytes()
+		yield (b'--frame\r\n'
+			   b'Content-Type: image/jpeg\r\n\r\n' + vid + b'\r\n\r\n')
+
+		# cv2.imshow("Real-Time Monitoring/Analysis Window", frame)
 		key = cv2.waitKey(1) & 0xFF
 
 		# if the `q` key was pressed, break from the loop
@@ -351,3 +358,12 @@ if config.Scheduler:
 
 else:
 	run()
+
+@app.route('/')
+def index():
+	global video
+	return Response(run(),
+					mimetype='multipart/x-mixed-replace; boundary=frame')
+
+if __name__ == '__main__':
+	app.run(host='0.0.0.0', port=5000, threaded=True)
